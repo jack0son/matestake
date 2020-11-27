@@ -174,7 +174,7 @@ describe('Todo Contract', function() {
 			await expectRevert(todo.createTask('', a_mate, one, { from: a_creator }), 'Text cannot be empty');
 		});
 
-		it('revert when task does not exists', async function() {
+		it('revert when task does not exist', async function() {
 			await expectRevert(todo.startTask(0, { from: a_creator }), 'Task does not exist');
 			await expectRevert(todo.completeTask(0, { from: a_creator }), 'Task does not exist');
 			await todo.createTask(taskText, a_mate, one, { from: a_creator });
@@ -230,6 +230,7 @@ describe('Todo Contract', function() {
 			await todo.completeTask(taskId, { from: a_mate });
 		});
 	});
+
 	describe('Staking', function() {
 		const stake = new BN(10e6);
 		it('should allow no stake', async function() {
@@ -328,6 +329,7 @@ describe('Todo Contract', function() {
 		});
 	});
 
-	// @TODO
-	describe('timed tasks', function() {});
+	// @TODO using eth alarm clock
+	// - timed slashing better than ransom slashing, no agency problems
+	describe('Timed', function() {});
 });
