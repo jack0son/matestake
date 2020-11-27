@@ -22,7 +22,7 @@ describe('Todo Contract', function() {
 		return expect(Status(await todo.getTaskStatus.call(taskId, { from: a_creator }))).to.equal(status);
 	};
 
-	beforeEach('Deploy WokeToken', async function() {
+	beforeEach(async function() {
 		todo = await Todo.new({ from: a_creator });
 	});
 
