@@ -46,6 +46,7 @@ contract Todo {
 		address payable creator = msg.sender;
 		tasksById[taskId] = TaskLib.Task({
 			creator: creator,
+			mate: _mate,
 			stake: msg.value,
 			text: _text,
 			status: TaskLib.Statuses.Created,
@@ -81,19 +82,38 @@ contract Todo {
 	 * @dev Tasks can only progress in single increments through the statuses
 	 * @param _taskId Task's ID
 	 */
-	function progressTask(uint256 _taskId) external
+	function startTask(uint256 _taskId) external
 		taskExists(_taskId)
 		onlyAuthorized(_taskId)
-		taskNotComplete(_taskId)
 	{
 		TaskLib.Task storage task = tasksById[_taskId];
-		task.status = TaskLib.Statuses(uint8(task.status) + 1);
+		require(task.status == TaskLib.Statuses.Created, 'Task already started');
+		task.status = TaskLib.Statuses.Pending;
+		task.blockStarted = block.number;
+
+		emit Status(_taskId, uint8(tasksById[_taskId].status), _taskId, uint8(tasksById[_taskId].status));
+	}
+
+	/*
+	 * @notice Progress the task to it's next status
+	 * @dev Tasks can only progress in single increments through the statuses
+	 * @param _taskId Task's ID
+	 */
+	function completeTask(uint256 _taskId) external
+		taskExists(_taskId)
+		onlyMate(_taskId)
+	{
+		TaskLib.Task storage task = tasksById[_taskId];
+		require(task.status == TaskLib.Statuses.Pending, 'Task must be pending');
+		task.status = TaskLib.Statuses.Complete;
 
 		if(task.status == TaskLib.Statuses.Pending) {
 			task.blockStarted = block.number;
 		} else if(task.status == TaskLib.Statuses.Complete) {
 			uint refund = _calculateRefund(task.stake, task.blockStarted, task.blocksToComplete);
 			if(refund > 0) {
+				burned += (task.stake - refund);
+				task.stake = 0;
 				task.creator.transfer(refund);
 			}
 
@@ -121,6 +141,10 @@ contract Todo {
 		return msg.sender == tasksById[_taskId].delegate;
 	}
 
+	function _isTaskMate(uint256 _taskId) internal view returns (bool) {
+		return msg.sender == tasksById[_taskId].mate;
+	}
+
 	function _isAuthorized(uint256 _taskId) internal view returns (bool) {
 		return _isTaskCreator(_taskId) || _isTaskDelegate(_taskId);
 	}
@@ -141,13 +165,13 @@ contract Todo {
 		_;
 	}
 
-	modifier onlyAuthorized(uint256 _taskId) {
-		require(_isAuthorized(_taskId), 'Sender is not creator or delegate');
+	modifier onlyMate(uint256 _taskId) {
+		require(_isTaskMate(_taskId), 'Sender is not mate');
 		_;
 	}
 
-	modifier taskNotComplete(uint256 _taskId) {
-		require(tasksById[_taskId].status != TaskLib.Statuses.Complete, 'Task already complete');
+	modifier onlyAuthorized(uint256 _taskId) {
+		require(_isAuthorized(_taskId), 'Sender is not creator or delegate');
 		_;
 	}
 
