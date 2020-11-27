@@ -4,8 +4,8 @@ pragma solidity ^0.7.0;
 import "./libs/TaskLib.sol";
 
 /*
- * @notice Append only todo list contaract
- * @dev Modifiers are used to improve upgradablity / extendability
+ * @notice Append only todo list contract
+ * @dev Modifiers are used to improve upgradability / extensibility
  * @dev Adding ability to stake ETH on a task
  */
 contract Todo {
@@ -25,7 +25,6 @@ contract Todo {
 	 * @returns task's allocated ID
 	 */
 	function createTask(string calldata _text) external returns (uint256 taskId) {
-
 		// Validate task
 		bytes memory text = bytes(_text);
 		require(bytes(text).length <= TASK_TEXT_LENGTH, 'Text length exceeds maxium');
@@ -38,7 +37,6 @@ contract Todo {
 		creatorsByTaskId[taskId] = creator;
 
 		emit Created(creator, taskId, creator, taskId);
-
 		return taskId;
 	}
 
