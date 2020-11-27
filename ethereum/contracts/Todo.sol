@@ -15,7 +15,7 @@ contract Todo {
 	mapping(uint256 => TaskLib.Task) private tasksById;
 
 	uint256 taskCounter = 0; // tasks are append only
-	uint256 discountPerBlock; // portion of stake to slash per block
+	uint256 discountPerBlock; // portion of stake to slash per block overdue
 	uint burned; // slashed stakes are burned, harsh
 
 	/*
@@ -35,6 +35,7 @@ contract Todo {
 	function createTask(string calldata _text, address _mate, uint256 _blocksToComplete) external payable
 	returns (uint256 taskId) {
 		require(_mate != address(0), 'Mate address cannot be empty');
+		require(_blocksToComplete > 0, 'Time limit in blocks must be positive');
 
 		bytes memory text = bytes(_text);
 		require(bytes(text).length <= TASK_TEXT_LENGTH, 'Text length exceeds maxium');
@@ -108,7 +109,7 @@ contract Todo {
 	 */
 	function _calculateRefund(uint stake, uint started, uint blocksToComplete) internal view returns (uint256) {
 		// @fix sacrificing gas (with additional callstack depth) in favour of clarity / testability
-		return Helpers._caculateRefund(stake, started, blocksToComplete, discountPerBlock, block.number);
+		return Helpers._caculateRefund(stake, started, blocksToComplete, block.number, discountPerBlock);
 	}
 
 	// Internal functions
