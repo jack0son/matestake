@@ -4,15 +4,15 @@ chai.should();
 const { expect } = chai;
 const chaiAsPromised = require('chai-as-promised');
 const assert = require('assert');
-
-const { Status, Statuses, isStatus } = require('../lib/todo.js');
-
 const {
 	BN, // Big Number support
 	constants, // Common constants, like the zero address and largest integers
 	expectEvent, // Assertions for emitted events
 	expectRevert, // Assertions for transactions that should fail
 } = require('@openzeppelin/test-helpers');
+
+const { Status, Statuses, statusList, isStatus } = require('../lib/todo.js');
+const statusToBN = (status) => new BN(statusList.indexOf(status));
 
 const Todo = contract.fromArtifact('Todo');
 const [a_creator, a_delegate, a_mate, a_stranger, a_a, a_b, a_c, a_d, ...other_accounts] = accounts;
@@ -39,10 +39,7 @@ describe('todo Contract', function() {
 			const firstTaskId = new BN(0);
 
 			// Check event was emitted
-			expectEvent(rx, 'Created', {
-				taskId: firstTaskId,
-				creator: a_creator,
-			});
+			expectEvent(rx, 'Created', { taskId: firstTaskId, creator: a_creator });
 
 			let taskId = rx.logs[0].args.taskId;
 			assert(taskId.eq(firstTaskId));
@@ -52,15 +49,17 @@ describe('todo Contract', function() {
 			expect(Status(await todo.getTaskStatus(taskId, { from: a_creator }))).to.equal(Statuses.Created);
 		});
 
-		it('update from Created to Pending to Completed', async function() {
+		it('status should progress from Created to Pending to Completed', async function() {
 			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
 
 			await expectTaskStatus(taskId, Statuses.Created);
 
-			await todo.progressTask(taskId, { from: a_creator });
+			let rx = await todo.progressTask(taskId, { from: a_creator });
+			expectEvent(rx, 'Status', { taskId: taskId, status: statusToBN(Statuses.Pending) });
 			await expectTaskStatus(taskId, Statuses.Pending);
 
-			await todo.progressTask(taskId, { from: a_creator });
+			rx = await todo.progressTask(taskId, { from: a_creator });
+			expectEvent(rx, 'Status', { taskId: taskId, status: statusToBN(Statuses.Complete) });
 			await expectTaskStatus(taskId, Statuses.Complete);
 		});
 

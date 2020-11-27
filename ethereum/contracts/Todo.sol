@@ -59,6 +59,8 @@ contract Todo {
 	{
 		tasksById[_taskId].status = TaskLib.Statuses(uint8(tasksById[_taskId].status) + 1);
 
+		emit Status(_taskId, uint8(tasksById[_taskId].status), _taskId, uint8(tasksById[_taskId].status));
+
 		// @TODO return stake
 	}
 
@@ -132,5 +134,5 @@ contract Todo {
 	}
 
 	event Created(address indexed idx_creator, uint256 indexed idx_taskId, address creator, uint256 taskId);
-	event Status(uint256 indexed idx_taskId, uint256 taskId, uint8 status);
+	event Status(uint256 indexed idx_taskId, uint8 indexed idx_status, uint256 taskId, uint8 status);
 }
