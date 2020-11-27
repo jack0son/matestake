@@ -9,7 +9,7 @@ import "./libs/TaskLib.sol";
  * @dev Adding ability to stake ETH on a task
  */
 contract Todo {
-	uint16 constant TASK_TEXT_LENGTH = 256; // byes
+	uint16 constant TASK_TEXT_LENGTH = 256; // bytes
 
 	mapping(uint256 => address) private creatorsByTaskId; // O(1) authorization checks
 	mapping(uint256 => TaskLib.Task) private tasksById;
