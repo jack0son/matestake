@@ -1,15 +1,9 @@
-const { accounts, contract, web3 } = require('@openzeppelin/test-environment');
 const chai = require('chai');
+chai.use(require('chai-as-promised'));
 chai.should();
-const { expect } = chai;
-const chaiAsPromised = require('chai-as-promised');
-const assert = require('assert');
-const {
-	BN, // Big Number support
-	constants, // Common constants, like the zero address and largest integers
-	expectEvent, // Assertions for emitted events
-	expectRevert, // Assertions for transactions that should fail
-} = require('@openzeppelin/test-helpers');
+const { expect, assert } = chai;
+const { accounts, contract, web3 } = require('@openzeppelin/test-environment');
+const { BN, constants, expectEvent, expectRevert } = require('@openzeppelin/test-helpers');
 
 const { Status, Statuses, statusList, isStatus } = require('../lib/todo.js');
 const statusToBN = (status) => new BN(statusList.indexOf(status));
@@ -19,20 +13,20 @@ const [a_creator, a_delegate, a_mate, a_stranger, a_a, a_b, a_c, a_d, ...other_a
 
 const taskText = 'build stakeamate app';
 
-describe('todo Contract', function() {
+describe('Todo Contract', function() {
 	let todo;
 
 	const expectTaskStatus = async (taskId, status) => {
 		if (taskId === undefined || taskId === null) throw new Error(`Invalid task ID: ${taskId}`);
 		if (!isStatus(status)) throw new Error(`Invalid status: ${status}`);
-		return expect(Status(await todo.getTaskStatus(taskId, { from: a_creator }))).to.equal(status);
+		return expect(Status(await todo.getTaskStatus.call(taskId, { from: a_creator }))).to.equal(status);
 	};
 
 	beforeEach('Deploy WokeToken', async function() {
 		todo = await Todo.new({ from: a_creator });
 	});
 
-	describe('tasks', function() {
+	describe('Tasks', function() {
 		it('can be created', async function() {
 			let rx = await todo.createTask(taskText, { from: a_creator });
 
@@ -42,11 +36,11 @@ describe('todo Contract', function() {
 			expectEvent(rx, 'Created', { taskId: firstTaskId, creator: a_creator });
 
 			let taskId = rx.logs[0].args.taskId;
-			assert(taskId.eq(firstTaskId));
+			expect(taskId.eq(firstTaskId)).to.be.true;
 
 			// Check task exists
 			expect(await todo.taskText(taskId, { from: a_creator })).to.equal(taskText);
-			expect(Status(await todo.getTaskStatus(taskId, { from: a_creator }))).to.equal(Statuses.Created);
+			await expectTaskStatus(taskId, Statuses.Created);
 		});
 
 		it('status should progress from Created to Pending to Completed', async function() {
@@ -61,6 +55,21 @@ describe('todo Contract', function() {
 			rx = await todo.progressTask(taskId, { from: a_creator });
 			expectEvent(rx, 'Status', { taskId: taskId, status: statusToBN(Statuses.Complete) });
 			await expectTaskStatus(taskId, Statuses.Complete);
+		});
+
+		it('revert if task text has invalid length', async function() {
+			const validText = Array(257).join('!');
+			assert(validText.length, 256);
+			await todo.createTask(validText, { from: a_creator });
+
+			const edge = Array(258).join('!');
+			assert(edge.length, 257);
+			await expectRevert(todo.createTask(edge, { from: a_creator }), 'Text length exceeds maxium');
+
+			const rightOut = Array(300).join('!');
+			await expectRevert(todo.createTask(rightOut, { from: a_creator }), 'Text length exceeds maxium');
+
+			await expectRevert(todo.createTask('', { from: a_creator }), 'Text cannot be empty');
 		});
 
 		it('revert when task does not exists', async function() {
@@ -85,30 +94,51 @@ describe('todo Contract', function() {
 			await todo.progressTask(taskId, { from: a_creator });
 
 			await expectRevert(todo.progressTask(taskId, { from: a_creator }), 'Task already complete');
-			await expectRevert(todo.delegateTask(taskId, a_delegate, { from: a_creator }), 'Task is not in correct state');
+			await expectRevert(todo.delegateTask(taskId, a_delegate, { from: a_creator }), 'Cannot delegate once started');
 		});
 	});
 
-	describe('staked tasks', function() {});
+	describe('Delegation', function() {
+		it('task can be delegated', async function() {
+			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
+			await todo.delegateTask(taskId, a_delegate, { from: a_creator });
 
-	describe('timed tasks', function() {
-		it('should return the stake', async function() {
-			this.skip();
+			expect(todo.isTaskDelegate.call(taskId, { from: a_delegate })).to.eventually.be.true;
+		});
+
+		it('only creator can delegate', async function() {
+			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
+
+			await expectRevert(todo.delegateTask(taskId, a_stranger, { from: a_delegate }), 'Sender is not creator');
+			await expectRevert(todo.delegateTask(taskId, a_delegate, { from: a_delegate }), 'Sender is not creator'); // modifier precedence
+		});
+
+		it('creator should not be delegate', async function() {
+			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
+			todo.delegateTask(taskId, a_delegate, { from: a_creator });
+			await expectRevert(todo.delegateTask(taskId, a_creator, { from: a_creator }), 'Creator cannot be delegate');
+		});
+
+		it('should not be able to delegate if pending or completed', async function() {
+			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
+			await todo.progressTask(taskId, { from: a_creator });
+			await expectRevert(todo.delegateTask(taskId, a_delegate, { from: a_creator }), 'Cannot delegate once started');
 		});
 	});
 
-	describe('load', function() {
-		let stressLoad = 10;
+	describe('Scale', function() {
+		let stressLoad = 50; // make this bigger if you have beans to brew
 
 		it(`should handle ${stressLoad} tasks`, async function() {
-			this.timeout(10000);
+			this.timeout(15000);
 			for (let i = 0; i < stressLoad; i++) {
 				await todo.createTask(`task_${i.toString().padStart(3)}`, { from: other_accounts[i] });
 			}
 
 			const completeAllTasks = [];
 
-			// Move all the tasts through each state
+			// Move all the tasks through each state
+			// - using promise chains to make transaction ordering more chaotic
 			for (let i = 0; i < stressLoad; i++) {
 				completeAllTasks.push(
 					todo
@@ -122,29 +152,8 @@ describe('todo Contract', function() {
 		});
 	});
 
-	// @TODO group tests by feature not good path vs corner cases
-	describe('delegated tasks', function() {
-		it('should allow a task to be delegated', async function() {
-			this.skip();
-		});
+	// @TODO
+	describe('staked tasks', function() {});
 
-		it('should not be able to delegate', async function() {
-			this.skip();
-		});
-
-		it('should not be able to delegate if pending or completed', async function() {
-			this.skip();
-		});
-	});
-
-	describe('corner cases', function() {
-		it('Check for overflow on taskId', async function() {
-			// How does web3 interpret bigger than 256 bit number?
-			this.skip();
-		});
-
-		it('', async function() {
-			this.skip();
-		});
-	});
+	describe('timed tasks', function() {});
 });

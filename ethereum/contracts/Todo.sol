@@ -3,14 +3,11 @@ pragma solidity ^0.7.0;
 
 import "./libs/TaskLib.sol";
 
-
-// Start building a solidity checklist...
-// @TODO check all state vars have correct visibility 
-// @TODO check function singature style used by NuCypher
-// @TODO Check doc format from solidity docs)
-// @TODO Check whether return types should be memory or calldata
-
-// contract Todo is Ownable {
+/*
+ * @notice Append only todo list contaract
+ * @dev Modifiers are used to improve upgradablity / extendability
+ * @dev Adding ability to stake ETH on a task
+ */
 contract Todo {
 	uint16 constant TASK_TEXT_LENGTH = 256; // byes
 
@@ -22,14 +19,20 @@ contract Todo {
 	constructor() {
 	}
 
+	/*
+	 * @notice Create a new task with a text description
+	 * @param _text Text description of the task
+	 * @returns task's allocated ID
+	 */
 	function createTask(string calldata _text) external returns (uint256 taskId) {
-		// validate task
-		address creator = msg.sender;
-		// address delegate = _delegate != address(0) ;
 
+		// Validate task
 		bytes memory text = bytes(_text);
-		require(bytes(text).length <= TASK_TEXT_LENGTH, 'text length exceeds maxium');
+		require(bytes(text).length <= TASK_TEXT_LENGTH, 'Text length exceeds maxium');
+		require(bytes(text).length > 0, 'Text cannot be empty');
 
+		// Create task
+		address creator = msg.sender;
 		taskId = taskCounter++;
 		tasksById[taskId] = TaskLib.Task({ creator: creator, text: _text, status: TaskLib.Statuses.Created, delegate: address(0)});
 		creatorsByTaskId[taskId] = creator;
@@ -39,19 +42,27 @@ contract Todo {
 		return taskId;
 	}
 
-	// Task that will tigger a slashing event after the deadline passes
-	// function createStakedTask(string _text, address mate) payable {
-	// uint256 stake = msg.value;
-	// }
-
+	/*
+	 * @notice Delegate a task to another address
+	 * @dev Delegate address may progress the task, but not assign new delegates
+	 * @param _taskId Task's ID
+	 * @param _delegate Delegate's address
+	 */
 	function delegateTask(uint256 _taskId, address _delegate) external
 	taskExists(_taskId)
 	onlyCreator(_taskId)
-	taskStatusIs(_taskId, TaskLib.Statuses.Created)
 	{
+		require(tasksById[_taskId].status == TaskLib.Statuses.Created, 'Cannot delegate once started');
+		// Nonsensical paths should be asserted
+		require(_delegate != msg.sender, 'Creator cannot be delegate');
 		tasksById[_taskId].delegate = _delegate;
 	}
 
+	/*
+	 * @notice Progress the task to it's next status
+	 * @dev Tasks can only progress in single increments through the statuses
+	 * @param _taskId Task's ID
+	 */
 	function progressTask(uint256 _taskId) external
 	taskExists(_taskId)
 	onlyAuthorized(_taskId)
@@ -60,8 +71,6 @@ contract Todo {
 		tasksById[_taskId].status = TaskLib.Statuses(uint8(tasksById[_taskId].status) + 1);
 
 		emit Status(_taskId, uint8(tasksById[_taskId].status), _taskId, uint8(tasksById[_taskId].status));
-
-		// @TODO return stake
 	}
 
 
@@ -79,16 +88,17 @@ contract Todo {
 	}
 
 	function _taskExists(uint256 _taskId) internal view returns (bool) {
+		// Works because there is no task deletion
 		return _taskId < taskCounter;
 	}
 
-	// Works because there is no task deletion
 	modifier taskExists(uint256 _taskId) {
 		require(_taskExists(_taskId), 'Task does not exist');
 		_;
 	}
 
 	// Modifiers
+	// @dev Using internal functions for modifiers saves substantial gas
 	modifier onlyCreator(uint256 _taskId) {
 		require(_isTaskCreator(_taskId), 'Sender is not creator');
 		_;
@@ -101,11 +111,6 @@ contract Todo {
 
 	modifier taskNotComplete(uint256 _taskId) {
 		require(tasksById[_taskId].status != TaskLib.Statuses.Complete, 'Task already complete');
-		_;
-	}
-
-	modifier taskStatusIs(uint256 _taskId, TaskLib.Statuses _status) {
-		require(tasksById[_taskId].status == _status, 'Task is not in correct state');
 		_;
 	}
 
