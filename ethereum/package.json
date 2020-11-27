@@ -1,0 +1,25 @@
+{
+  "name": "@matestake/contracts",
+  "version": "0.1.0",
+  "description": "Commit with time lock or get a friend to help",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@openzeppelin/test-environment": "^0.1.8",
+    "@openzeppelin/test-helpers": "^0.5.9",
+    "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
+    "mocha": "^8.2.1",
+    "truffle": "^5.1.54",
+    "truffle-assertions": "^0.9.2"
+  },
+  "scripts": {
+    "test": "mocha --exit --recursive",
+    "test:compile": "truffle compile && mocha --exit --recursive"
+  },
+  "author": "jack0son",
+  "license": "MIT"
+}
