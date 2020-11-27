@@ -5,11 +5,11 @@ import "./libs/TaskLib.sol";
 import "./libs/Helpers.sol";
 
 /*
- * @notice Append only todo list contaract
+ * @notice Append only todo list contract
  * @dev Adding ability to stake ETH on a task
  */
 contract Todo {
-	uint16 constant TASK_TEXT_LENGTH = 256; // byes
+	uint16 constant TASK_TEXT_LENGTH = 256; // bytes
 
 	mapping(uint256 => address) private creatorsByTaskId; // O(1) authorization checks
 	mapping(uint256 => TaskLib.Task) private tasksById;
@@ -26,15 +26,19 @@ contract Todo {
 	}
 
 	/*
-	 * @notice Create a new task with a text description
+	 * @notice Create a new task which must be completed with a certain number of blocks
+	 * @dev Task that will tigger a slashing event after the deadline passes - Eth alarm clock would be better here
 	 * @param _text Text description of the task
-	 * @param _blockDeadline Number of blocks until creator gets slashed
+	 * @param _blocksToComplete Number of blocks until creator gets slashed
 	 * @returns task's allocated ID
 	 */
-	function createTask(string calldata _text, uint256 _blocksToComplete) external payable
+	function createTask(string calldata _text, address _mate, uint256 _blocksToComplete) external payable
 	returns (uint256 taskId) {
+		require(_mate != address(0), 'Mate address cannot be empty');
+
 		bytes memory text = bytes(_text);
-		require(bytes(text).length <= TASK_TEXT_LENGTH, 'text length exceeds maxium');
+		require(bytes(text).length <= TASK_TEXT_LENGTH, 'Text length exceeds maxium');
+		require(bytes(text).length > 0, 'Text cannot be empty');
 
 		// Create the task entry
 		taskId = taskCounter++;
@@ -52,20 +56,8 @@ contract Todo {
 		creatorsByTaskId[taskId] = creator;
 
 		emit Created(creator, taskId, creator, taskId);
-
 		return taskId;
 	}
-
-	/*
-	 * @notice Create a new task which must be completed with a certain number of blocks
-	 * @dev Task that will tigger a slashing event after the deadline passes - Eth alarm clock would be better here
-	 * @param _text Text description of the task
-	 * @param _mate Your mate who will verify the task's completion
-	 * @param _blockDeadline Number of blocks until creator gets slashed
-	 */
-	// function createMateTask(string calldata _text, address _mate, uint256 _blockDeadline) external returns (uint256 taskId) {
-	//		uint256 stake = msg.value;
-	// }
 
 	/*
 	 * @notice Delegate a task to another address
@@ -74,23 +66,24 @@ contract Todo {
 	 * @param _delegate Delegate's address
 	 */
 	function delegateTask(uint256 _taskId, address _delegate) external
-	taskExists(_taskId)
-	onlyCreator(_taskId)
-	taskStatusIs(_taskId, TaskLib.Statuses.Created)
+		taskExists(_taskId)
+		onlyCreator(_taskId)
 	{
+		require(tasksById[_taskId].status == TaskLib.Statuses.Created, 'Cannot delegate once started');
+		// Nonsensical paths should be asserted
+		require(_delegate != msg.sender, 'Creator cannot be delegate');
 		tasksById[_taskId].delegate = _delegate;
 	}
 
 	/*
-	 * @notice Delegate a task to another address
-	 * @dev Delegate address may progress the task, but not assign other delegates
+	 * @notice Progress the task to it's next status
+	 * @dev Tasks can only progress in single increments through the statuses
 	 * @param _taskId Task's ID
-	 * @param _delegate Delegate's address
 	 */
 	function progressTask(uint256 _taskId) external
-	taskExists(_taskId)
-	onlyAuthorized(_taskId)
-	taskNotComplete(_taskId)
+		taskExists(_taskId)
+		onlyAuthorized(_taskId)
+		taskNotComplete(_taskId)
 	{
 		TaskLib.Task storage task = tasksById[_taskId];
 		task.status = TaskLib.Statuses(uint8(task.status) + 1);
