@@ -114,11 +114,6 @@ contract Todo {
 		_;
 	}
 
-	modifier onlyTaskCreator(uint256 _taskId) {
-		require(_isTaskCreator(_taskId), 'sender not task creator');
-		_;
-	}
-
 	// View API
 	function taskText(uint256 _taskId) external view
 	taskExists(_taskId)
