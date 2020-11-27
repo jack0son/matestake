@@ -6,9 +6,12 @@ library TaskLib {
 
 	struct Task {
 		// @TODO include test for string length limitation
-		address creator;
+		address payable creator;
+		uint stake; // staked wei
 		string text; // the todo
 		Statuses status; // status
 		address delegate;
+		uint blockStarted; // block number the task was created
+		uint blocksToComplete; // number of blocks until stake is slashed
 	}
 }

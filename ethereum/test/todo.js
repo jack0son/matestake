@@ -137,6 +137,8 @@ describe('todo Contract', function() {
 		});
 	});
 
+	descibe('helpers', function() {});
+
 	describe('corner cases', function() {
 		it('Check for overflow on taskId', async function() {
 			// How does web3 interpret bigger than 256 bit number?

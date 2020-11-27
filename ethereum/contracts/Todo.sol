@@ -2,15 +2,12 @@
 pragma solidity ^0.7.0;
 
 import "./libs/TaskLib.sol";
+import "./libs/Helpers.sol";
 
-
-// Start building a solidity checklist...
-// @TODO check all state vars have correct visibility 
-// @TODO check function singature style used by NuCypher
-// @TODO Check doc format from solidity docs)
-// @TODO Check whether return types should be memory or calldata
-
-// contract Todo is Ownable {
+/*
+ * @notice Append only todo list contaract
+ * @dev Adding ability to stake ETH on a task
+ */
 contract Todo {
 	uint16 constant TASK_TEXT_LENGTH = 256; // byes
 
@@ -18,20 +15,40 @@ contract Todo {
 	mapping(uint256 => TaskLib.Task) private tasksById;
 
 	uint256 taskCounter = 0; // tasks are append only
+	uint256 discountPerBlock; // portion of stake to slash per block
+	uint burned; // slashed stakes are burned, harsh
 
-	constructor() {
+	/*
+	 * @param _discountPerBlock Fraction of stake to slash per block past deadline
+	 */
+	constructor(uint256 _discountPerBlock) {
+		discountPerBlock = _discountPerBlock;
 	}
 
-	function createTask(string calldata _text) external returns (uint256 taskId) {
-		// validate task
-		address creator = msg.sender;
-		// address delegate = _delegate != address(0) ;
-
+	/*
+	 * @notice Create a new task with a text description
+	 * @param _text Text description of the task
+	 * @param _blockDeadline Number of blocks until creator gets slashed
+	 * @returns task's allocated ID
+	 */
+	function createTask(string calldata _text, uint256 _blocksToComplete) external payable
+	returns (uint256 taskId) {
 		bytes memory text = bytes(_text);
 		require(bytes(text).length <= TASK_TEXT_LENGTH, 'text length exceeds maxium');
 
+		// Create the task entry
 		taskId = taskCounter++;
-		tasksById[taskId] = TaskLib.Task({ creator: creator, text: _text, status: TaskLib.Statuses.Created, delegate: address(0)});
+		address payable creator = msg.sender;
+		tasksById[taskId] = TaskLib.Task({
+			creator: creator,
+			stake: msg.value,
+			text: _text,
+			status: TaskLib.Statuses.Created,
+			delegate: address(0),
+			blockStarted: 0,
+			blocksToComplete: _blocksToComplete
+		});
+
 		creatorsByTaskId[taskId] = creator;
 
 		emit Created(creator, taskId, creator, taskId);
@@ -39,11 +56,23 @@ contract Todo {
 		return taskId;
 	}
 
-	// Task that will tigger a slashing event after the deadline passes
-	// function createStakedTask(string _text, address mate) payable {
-	// uint256 stake = msg.value;
+	/*
+	 * @notice Create a new task which must be completed with a certain number of blocks
+	 * @dev Task that will tigger a slashing event after the deadline passes - Eth alarm clock would be better here
+	 * @param _text Text description of the task
+	 * @param _mate Your mate who will verify the task's completion
+	 * @param _blockDeadline Number of blocks until creator gets slashed
+	 */
+	// function createMateTask(string calldata _text, address _mate, uint256 _blockDeadline) external returns (uint256 taskId) {
+	//		uint256 stake = msg.value;
 	// }
 
+	/*
+	 * @notice Delegate a task to another address
+	 * @dev Delegate address may progress the task, but not assign other delegates
+	 * @param _taskId Task's ID
+	 * @param _delegate Delegate's address
+	 */
 	function delegateTask(uint256 _taskId, address _delegate) external
 	taskExists(_taskId)
 	onlyCreator(_taskId)
@@ -52,18 +81,42 @@ contract Todo {
 		tasksById[_taskId].delegate = _delegate;
 	}
 
+	/*
+	 * @notice Delegate a task to another address
+	 * @dev Delegate address may progress the task, but not assign other delegates
+	 * @param _taskId Task's ID
+	 * @param _delegate Delegate's address
+	 */
 	function progressTask(uint256 _taskId) external
 	taskExists(_taskId)
 	onlyAuthorized(_taskId)
 	taskNotComplete(_taskId)
 	{
-		tasksById[_taskId].status = TaskLib.Statuses(uint8(tasksById[_taskId].status) + 1);
+		TaskLib.Task storage task = tasksById[_taskId];
+		task.status = TaskLib.Statuses(uint8(task.status) + 1);
+
+		if(task.status == TaskLib.Statuses.Pending) {
+			task.blockStarted = block.number;
+		} else if(task.status == TaskLib.Statuses.Complete) {
+			uint refund = _calculateRefund(task.stake, task.blockStarted, task.blocksToComplete);
+			if(refund > 0) {
+				task.creator.transfer(refund);
+			}
+
+			emit Complete(_taskId, _taskId, refund);
+		}
 
 		emit Status(_taskId, uint8(tasksById[_taskId].status), _taskId, uint8(tasksById[_taskId].status));
-
-		// @TODO return stake
 	}
 
+	/*
+	 * @notice Caclulate how much of the stake to return to the task creator
+	 * @dev Params as in Helpers._calculateRefund
+	 */
+	function _calculateRefund(uint stake, uint started, uint blocksToComplete) internal view returns (uint256) {
+		// @fix sacrificing gas (with additional callstack depth) in favour of clarity / testability
+		return Helpers._caculateRefund(stake, started, blocksToComplete, discountPerBlock, block.number);
+	}
 
 	// Internal functions
 	function _isTaskCreator(uint256 _taskId) internal view returns (bool) {
@@ -135,4 +188,5 @@ contract Todo {
 
 	event Created(address indexed idx_creator, uint256 indexed idx_taskId, address creator, uint256 taskId);
 	event Status(uint256 indexed idx_taskId, uint8 indexed idx_status, uint256 taskId, uint8 status);
+	event Complete(uint256 indexed idx_taskId, uint256 taskId, uint256 refund);
 }
