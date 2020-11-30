@@ -300,25 +300,6 @@ describe('Todo Contract', function() {
 		it('should burn slashed ETH', async function() {
 			this.skip();
 		});
-
-		it('only creator can delegate', async function() {
-			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
-
-			await expectRevert(todo.delegateTask(taskId, a_stranger, { from: a_delegate }), 'Sender is not creator');
-			await expectRevert(todo.delegateTask(taskId, a_delegate, { from: a_delegate }), 'Sender is not creator'); // modifier precedence
-		});
-
-		it('creator should not be delegate', async function() {
-			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
-			todo.delegateTask(taskId, a_delegate, { from: a_creator });
-			await expectRevert(todo.delegateTask(taskId, a_creator, { from: a_creator }), 'Creator cannot be delegate');
-		});
-
-		it('should not be able to delegate if pending or completed', async function() {
-			let taskId = (await todo.createTask(taskText, { from: a_creator })).logs[0].args.taskId;
-			await todo.progressTask(taskId, { from: a_creator });
-			await expectRevert(todo.delegateTask(taskId, a_delegate, { from: a_creator }), 'Cannot delegate once started');
-		});
 	});
 
 	describe('Scale', function() {
